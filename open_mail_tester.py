@@ -134,7 +134,11 @@ class TestCase:
     def test(self):
         code, msg = self.assertNo5xx('mail', self.get_sender())
         code, msg = self.assertNo5xx('rcpt', self.get_rcpt())
-        code, msg = self.assertNo5xx('data', 'Open Mail Relay')
+        code, msg = self.assertNo5xx('data',
+                'From: {0}\nTo: {1}\nSubject: Open Mail Relay\nOpen Mail Relay'.format(
+                    self.get_sender(),
+                    self.get_rcpt()
+                    ))
 
     def __str__(self):
         return "\n".join([
