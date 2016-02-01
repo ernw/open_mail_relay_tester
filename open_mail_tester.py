@@ -1,12 +1,12 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # encoding: utf-8
-#  Copyright (c) 2014, Timo Schmid
-#  
+#  Copyright (c) 2016, Timo Schmid
+#
 #  All rights reserved.
-#  
+#
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
-#  
+#
 #      * Redistributions of source code must retain the above copyright
 #        notice, this list of conditions and the following disclaimer.
 #      * Redistributions in binary form must reproduce the above copyright
@@ -15,7 +15,7 @@
 #      * Neither the name of the ERNW GmbH nor the names of its
 #        contributors may be used to endorse or promote products derived from
 #        this software without specific prior written permission.
-#  
+#
 #  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
 #  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
 #  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
@@ -33,26 +33,34 @@ import argparse
 import socket
 import os
 import time
+import sys
 try:
     import helperlib
     from helperlib import spinner
-except ImportError:    
+except ImportError:
     class Printer:
         def getattr(self, name):
             return print
 
     spinner = helperlib = Printer()
 
+
+# disable email address parsing
+smtplib.quoteaddr = lambda a: "<{}>".format(a)
+
+
 def recvline(sock):
     stop = 0
     line = b''
     while True:
         i = sock.recv(1)
-        if i == b'\n': stop = 1
+        if i == b'\n':
+            stop = 1
         line += i
         if stop == 1:
             break
     return line
+
 
 class ProxyMixin:
     def _get_socket(self, port, host, timeout):
@@ -61,17 +69,22 @@ class ProxyMixin:
 
         # This makes it simpler for SMTP_SSL to use the SMTP connect code
         # and just alter the socket connection bit.
-        if self.debuglevel > 0: print>>stderr, 'connect:', (host, port)
+        if self.debuglevel > 0:
+            print('connect:', (host, port), file=sys.stderr)
         new_socket = socket.create_connection((self.p_address, self.p_port), timeout)
-        new_socket.sendall("CONNECT {0}:{1} HTTP/1.1\r\n\r\n".format(port,host).encode())
-        for x in range(2): recvline(new_socket)
+        new_socket.sendall("CONNECT {0}:{1} HTTP/1.1\r\n\r\n".format(port, host).encode())
+        for x in range(2):
+            recvline(new_socket)
         return new_socket
+
 
 class ProxySMTP(ProxyMixin, smtplib.SMTP):
     pass
 
+
 class ProxySMTP_SSL(ProxyMixin, smtplib.SMTP_SSL):
     pass
+
 
 class SMTPError(IOError):
     def __init__(self, code, msg, *args, **kwargs):
@@ -79,8 +92,9 @@ class SMTPError(IOError):
         self.code = code
         self.msg = msg
 
+
 class TestCase:
-    def __init__(self, host, local_addr, remote_addr, port=0, ssl=False):
+    def __init__(self, host, local_addr, remote_addr, port=0, ssl=False, debug=False):
         self.host = host
         self.port = port
         self.local_addr = local_addr
@@ -89,6 +103,9 @@ class TestCase:
             self.s = ProxySMTP_SSL()
         else:
             self.s = ProxySMTP()
+
+        if debug:
+            self.s.set_debuglevel(1)
 
         if 'http_proxy' in os.environ:
             proxy = os.environ['http_proxy'].split('//')[1]
@@ -126,77 +143,95 @@ class TestCase:
             "TO=" + self.get_rcpt()
             ])
 
+
 class DefaultTest(TestCase):
     def get_sender(self):
         return self.remote_addr
     get_rcpt = get_sender
 
+
 class BogusLocalTest(DefaultTest):
     def get_sender(self):
         return '@'.join(['some_address', self.local_addr.split('@')[-1]])
 
+
 class LocalTest(DefaultTest):
     def get_sender(self):
         return self.local_addr
+
 
 class LocalhostTest(DefaultTest):
     def get_sender(self):
         sender = self.local_addr.split('@')[0], 'localhost'
         return '@'.join(sender)
 
+
 class UseronlyTest(DefaultTest):
     def get_sender(self):
         return self.local_addr.split('@')[0]
+
 
 class NullTest(DefaultTest):
     def get_sender(self):
         return ''
 
+
 class PercentRemoteTest(LocalTest):
     def get_rcpt(self):
         return self.remote_addr.replace('@', '%')
+
 
 class KnownTest(DefaultTest):
     def get_sender(self):
         sender = 'postmaster', self.local_addr.split('@')[-1]
         return '@'.join(sender)
 
+
 class EmptyHostTest(DefaultTest):
     def get_sender(self):
         return self.local_addr.split('@')[0] + '@'
+
 
 class AddressTest(DefaultTest):
     def get_sender(self):
         addr = socket.gethostbyname(self.host)
         return '{}@[@]'.format(self.local_addr.split('@')[0], addr)
 
+
 class HostDomainTest(LocalTest):
     def get_ehlo_host(self):
         return self.local_addr.split('@')[-1]
+
 
 class NonexistingEhloTest(LocalTest):
     def get_ehlo_host(self):
         return 'this_domain_does_nt_exist.org'
 
+
 class EhloOverflowTest(LocalTest):
     def get_ehlo_host(self):
         return 'A'*2048 + '.com'
+
 
 class BangPathTest(LocalTest):
     def get_rcpt(self):
         return '!'.join(reversed(self.remote_addr.split('@')))
 
+
 class SourceRouting(LocalTest):
     def get_rcpt(self):
         return '@{}:{}'.format(self.host, self.remote_addr)
+
 
 class SourceRouting2(LocalTest):
     def get_rcpt(self):
         return '{}@{}'.format(self.remote_addr, self.host)
 
+
 class SourceRoutingPercent(LocalTest):
     def get_rcpt(self):
         return '{}@{}'.format(self.remote_addr.replace('@', '%'), self.host)
+
 
 TESTS = [
     DefaultTest,
@@ -217,8 +252,9 @@ TESTS = [
     SourceRouting2,
     SourceRoutingPercent,
 ]
-        
-def run_tests(host, local, remote, port=0, ssl=False):
+
+
+def run_tests(host, local, remote, port=0, ssl=False, debug=False):
     if 'http_proxy' in os.environ:
         proxy = os.environ['http_proxy'].split('//')[1]
         p_address, p_port = proxy.split(':')
@@ -227,13 +263,13 @@ def run_tests(host, local, remote, port=0, ssl=False):
         helperlib.info('Using Proxy {}:{}\n'.format(p_address, p_port))
     success = []
     spinner.waitfor('Testing')
-    for i,test in enumerate(TESTS, 1):
+    for i, test in enumerate(TESTS, 1):
         spinner.status('{} ({}/{}) '.format(test.__name__, i, len(TESTS)))
-        s = test(host, local, remote, port, ssl)
+        s = test(host, local, remote, port, ssl, debug)
         try:
             s.setup()
             s.test()
-        except SMTPError as e:
+        except SMTPError:
             spinner.status_append('${RED}FAIL${NORMAL}')
         else:
             spinner.status_append('${GREEN}SUCCESS${NORMAL}')
@@ -253,9 +289,12 @@ if __name__ == '__main__':
     parser.add_argument('HOST')
     parser.add_argument('-p', '--port', default=0)
     parser.add_argument('-s', '--ssl', action='store_true')
-    parser.add_argument('LOCAL')
-    parser.add_argument('REMOTE')
+    parser.add_argument('-d', '--debug', action='store_true', help='display network traffic')
+    parser.add_argument('LOCAL', help='existing mailbox on the target server')
+    parser.add_argument('REMOTE', help='existing mailbox to use for testing')
 
     args = parser.parse_args()
 
-    run_tests(host=args.HOST, port=args.port, local=args.LOCAL, remote=args.REMOTE, ssl=args.ssl)
+    run_tests(host=args.HOST, port=args.port,
+              local=args.LOCAL, remote=args.REMOTE,
+              ssl=args.ssl, debug=args.debug)
