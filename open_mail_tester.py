@@ -284,7 +284,7 @@ def run_tests(host, local, remote, port=0, ssl=False, debug=False, base_test=Fal
         try:
             s.setup()
             s.test()
-        except SMTPError:
+        except (SMTPError, smtplib.SMTPException):
             spinner.status_append('${RED}FAIL${NORMAL}')
         else:
             spinner.status_append('${GREEN}SUCCESS${NORMAL}')
