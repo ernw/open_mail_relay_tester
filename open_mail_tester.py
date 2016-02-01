@@ -144,6 +144,14 @@ class TestCase:
             ])
 
 
+class BaseTest(TestCase):
+    def get_sender(self):
+        return self.remote_addr
+
+    def get_rcpt(self):
+        return self.local_addr
+
+
 class DefaultTest(TestCase):
     def get_sender(self):
         return self.remote_addr
@@ -254,7 +262,10 @@ TESTS = [
 ]
 
 
-def run_tests(host, local, remote, port=0, ssl=False, debug=False):
+def run_tests(host, local, remote, port=0, ssl=False, debug=False, base_test=False):
+    if base_test:
+        TESTS.insert(0, BaseTest)
+
     if 'http_proxy' in os.environ:
         proxy = os.environ['http_proxy'].split('//')[1]
         p_address, p_port = proxy.split(':')
@@ -290,6 +301,7 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--port', default=0)
     parser.add_argument('-s', '--ssl', action='store_true')
     parser.add_argument('-d', '--debug', action='store_true', help='display network traffic')
+    parser.add_argument('-b', '--base', action='store_true', help='do a connection test (send mail from remote to local)')
     parser.add_argument('LOCAL', help='existing mailbox on the target server')
     parser.add_argument('REMOTE', help='existing mailbox to use for testing')
 
@@ -297,4 +309,4 @@ if __name__ == '__main__':
 
     run_tests(host=args.HOST, port=args.port,
               local=args.LOCAL, remote=args.REMOTE,
-              ssl=args.ssl, debug=args.debug)
+              ssl=args.ssl, debug=args.debug, base_test=args.base)
